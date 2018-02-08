@@ -7,10 +7,8 @@ default_img_url = "https://secure.gravatar.com"
 
 def member_filter(m):
     """Determine if we want to include member m."""
-    return not any(
-        m[k] for k in
-        ["deleted", "is_bot", "is_restricted", "is_ultra_restricted"]
-    )
+    bools = ["deleted", "is_bot", "is_restricted", "is_ultra_restricted"]
+    return not any(m[k] for k in bools) and m["id"] != "USLACKBOT"
 
 
 def filter_fields(m):
@@ -28,22 +26,33 @@ def filter_fields(m):
     return m_filtered
 
 
-def handler(event, context):
-    """AWS Lambda entrypoint function."""
-    status = 200
-
-    try:
-        slack = slacker.Slacker(os.environ["SLACK_TOKEN"])
-        members_raw = filter(member_filter, slack.users.list().body["members"])
-        members = [filter_fields(m) for m in members_raw]
-
-    except Exception as e:
-        print("Exception: %s" % e)
-        status = 500
-
+def finish(status, body):
+    """Return the API response."""
     return {
         "isBase64Encoded": False,
         "headers": {},
         "statusCode": status,
-        "body": json.dumps(members),
+        "body": body,
     }
+
+
+def handler(event, context):
+    """AWS Lambda entrypoint function."""
+    slack = slacker.Slacker(os.environ["SLACK_TOKEN"])
+    try:
+        response = slack.users.list()
+        if not response.successful:
+            print("Failure retrieving members: %s" % response.error)
+            return finish(500, None)
+        elif "members" not in response.body:
+            print("Missing 'members' key")
+            return finish(500, None)
+
+        members_raw = filter(member_filter, response.body["members"])
+        members = [filter_fields(m) for m in members_raw]
+
+    except Exception as e:
+        print("Exception: %s" % e)
+        return finish(500, None)
+
+    return finish(200, json.dumps(members))
