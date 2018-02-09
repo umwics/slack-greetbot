@@ -1,5 +1,6 @@
 import json
 import os
+import requests_cache
 import slacker
 
 default_img_url = "https://secure.gravatar.com"
@@ -38,7 +39,11 @@ def finish(status, body):
 
 def handler(event, context):
     """AWS Lambda entrypoint function."""
-    slack = slacker.Slacker(os.environ["SLACK_TOKEN"])
+
+    slack = slacker.Slacker(
+        os.environ["SLACK_TOKEN"],
+        session=requests_cache.CachedSession(),
+    )
     try:
         response = slack.users.list()
         if not response.successful:
